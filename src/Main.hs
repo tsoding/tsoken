@@ -14,15 +14,13 @@ import Text.Printf
 import URI.ByteString
 import Control.Applicative
 import Cookie
+import System.Environment
 
 rightToMaybe :: Either a b -> Maybe b
 rightToMaybe (Right b) = Just b
 rightToMaybe (Left _) = Nothing
 
 type Token = B.ByteString
-
-secretToken :: Token
-secretToken = "just-a-test-token"
 
 tokenFromURI :: Request -> Maybe Token
 tokenFromURI request = do
@@ -42,8 +40,8 @@ tokenFromCookie request = do
   cookies <- parseCookies cookieString
   lookup "token" cookies
 
-authApp :: Application
-authApp req respond = do
+authApp :: Token ->  Application
+authApp secretToken req respond = do
   let token =
         tokenFromURI req <|> tokenFromXOriginalURI req <|> tokenFromCookie req
   if token == Just secretToken
@@ -54,8 +52,13 @@ authApp req respond = do
            "Okayeg"
     else respond $ responseLBS status403 [] "DansGame"
 
-main :: IO ()
-main = do
+mainWithArgs :: [String] -> IO ()
+mainWithArgs (tokenFilePath:_) = do
+  secretToken <- B.strip <$> B.readFile tokenFilePath
   let port = 8082
   printf "Listening on http://localhost:%d/\n" port
-  run port authApp
+  run port (authApp secretToken)
+mainWithArgs _ = error "Usage: tsoken <token-file-path>"
+
+main :: IO ()
+main = getArgs >>= mainWithArgs

@@ -45,7 +45,7 @@ tokenFromCookie request = do
 authApp :: Application
 authApp req respond = do
   let token =
-        tokenFromCookie req <|> tokenFromXOriginalURI req <|> tokenFromURI req
+        tokenFromURI req <|> tokenFromXOriginalURI req <|> tokenFromCookie req
   if token == Just secretToken
     then respond $
          responseLBS

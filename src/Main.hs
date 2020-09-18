@@ -12,23 +12,46 @@ import Network.Wai
 import Network.Wai.Handler.Warp
 import Text.Printf
 import URI.ByteString
+import Control.Applicative
+import Cookie
 
 rightToMaybe :: Either a b -> Maybe b
 rightToMaybe (Right b) = Just b
 rightToMaybe (Left _) = Nothing
 
-secretToken :: B.ByteString
+type Token = B.ByteString
+
+secretToken :: Token
 secretToken = "just-a-test-token"
+
+tokenFromURI :: Request -> Maybe Token
+tokenFromURI request = do
+  let uri = rawQueryString request
+  RelativeRef {rrQuery = query} <- rightToMaybe $ parseRelativeRef strictURIParserOptions uri
+  lookup "token" $ queryPairs query
+
+tokenFromXOriginalURI :: Request -> Maybe Token
+tokenFromXOriginalURI request = do
+  xOriginaURI <- lookup "X-Original-URI" $ requestHeaders request
+  RelativeRef {rrQuery = query} <- rightToMaybe $ parseRelativeRef strictURIParserOptions xOriginaURI
+  lookup "token" $ queryPairs query
+
+tokenFromCookie :: Request -> Maybe Token
+tokenFromCookie request = do
+  cookieString <- lookup "Cookie" $ requestHeaders request
+  cookies <- parseCookies cookieString
+  lookup "token" cookies
 
 authApp :: Application
 authApp req respond = do
-  let token = do
-        uri <- lookup "X-Original-URI" $ requestHeaders req
-        RelativeRef {rrQuery = query} <-
-          rightToMaybe $ parseRelativeRef strictURIParserOptions uri
-        lookup "token" $ queryPairs query
+  let token =
+        tokenFromCookie req <|> tokenFromXOriginalURI req <|> tokenFromURI req
   if token == Just secretToken
-    then respond $ responseLBS status200 [("Set-Cookie", "token=" <> secretToken)] "Okayeg"
+    then respond $
+         responseLBS
+           status200
+           [("Set-Cookie", "token=" <> secretToken)]
+           "Okayeg"
     else respond $ responseLBS status403 [] "DansGame"
 
 main :: IO ()

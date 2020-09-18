@@ -1,43 +1,35 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs #-}
+
 module Main where
 
-import Network.Wai.Handler.Warp
-import Network.Wai
-import Network.HTTP.Types.Status
-import Network.HTTP.Types.Header
-import Text.Printf
+import qualified Data.ByteString.Char8 as B
 import Data.List
 import Data.Maybe
-import Network.URI
-import qualified Data.ByteString.Char8 as B
+import Network.HTTP.Types.Header
+import Network.HTTP.Types.Status
+import Network.Wai
+import Network.Wai.Handler.Warp
+import Text.Printf
+import URI.ByteString
 
-listAsPair :: [a] -> Maybe (a, a)
-listAsPair [x, y] = Just (x, y)
-listAsPair _ = Nothing
+rightToMaybe :: Either a b -> Maybe b
+rightToMaybe (Right b) = Just b
+rightToMaybe (Left _) = Nothing
 
-extractTokenFromHeaders :: [Header] -> Maybe String
-extractTokenFromHeaders headers = do
-  (_, originalURI) <- find (((==) "X-Original-URI") . fst) headers
-  uri <- parseRelativeReference $ B.unpack originalURI
-  pair <- B.uncons $ B.pack $ uriQuery uri
-  case pair of
-    ('?', args) -> do
-      arg <-
-        find ((== "token") . fst) $
-        mapMaybe (listAsPair . B.split '=') $ B.split '&' args
-      return $ B.unpack $ snd arg
-    _ -> Nothing
-
-secretToken :: String
+secretToken :: B.ByteString
 secretToken = "just-a-test-token"
 
 authApp :: Application
 authApp req respond = do
-  let headers = requestHeaders req
-  let token = extractTokenFromHeaders headers
+  let token = do
+        uri <- lookup "X-Original-URI" $ requestHeaders req
+        RelativeRef {rrQuery = query} <-
+          rightToMaybe $ parseRelativeRef strictURIParserOptions uri
+        lookup "token" $ queryPairs query
   if token == Just secretToken
-  then respond $ responseLBS status200 [] "Okayeg"
-  else respond $ responseLBS status403 [] "DansGame"
+    then respond $ responseLBS status200 [("Set-Cookie", "token=" <> secretToken)] "Okayeg"
+    else respond $ responseLBS status403 [] "DansGame"
 
 main :: IO ()
 main = do

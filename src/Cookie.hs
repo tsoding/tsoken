@@ -1,9 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 module Cookie where
 
 import qualified Data.ByteString.Char8 as B
 
 type Cookie = (B.ByteString, B.ByteString)
+
 type Cookies = [Cookie]
 
 parseCookie :: B.ByteString -> Maybe Cookie

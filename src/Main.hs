@@ -3,6 +3,8 @@
 
 module Main where
 
+import Control.Applicative
+import Cookie
 import qualified Data.ByteString.Char8 as B
 import Data.List
 import Data.Maybe
@@ -10,11 +12,9 @@ import Network.HTTP.Types.Header
 import Network.HTTP.Types.Status
 import Network.Wai
 import Network.Wai.Handler.Warp
+import System.Environment
 import Text.Printf
 import URI.ByteString
-import Control.Applicative
-import Cookie
-import System.Environment
 
 rightToMaybe :: Either a b -> Maybe b
 rightToMaybe (Right b) = Just b
@@ -25,13 +25,15 @@ type Token = B.ByteString
 tokenFromURI :: Request -> Maybe Token
 tokenFromURI request = do
   let uri = rawQueryString request
-  RelativeRef {rrQuery = query} <- rightToMaybe $ parseRelativeRef strictURIParserOptions uri
+  RelativeRef {rrQuery = query} <-
+    rightToMaybe $ parseRelativeRef strictURIParserOptions uri
   lookup "token" $ queryPairs query
 
 tokenFromXOriginalURI :: Request -> Maybe Token
 tokenFromXOriginalURI request = do
   xOriginaURI <- lookup "X-Original-URI" $ requestHeaders request
-  RelativeRef {rrQuery = query} <- rightToMaybe $ parseRelativeRef strictURIParserOptions xOriginaURI
+  RelativeRef {rrQuery = query} <-
+    rightToMaybe $ parseRelativeRef strictURIParserOptions xOriginaURI
   lookup "token" $ queryPairs query
 
 tokenFromCookie :: Request -> Maybe Token
@@ -40,7 +42,7 @@ tokenFromCookie request = do
   cookies <- parseCookies cookieString
   lookup "token" cookies
 
-authApp :: Token ->  Application
+authApp :: Token -> Application
 authApp secretToken req respond = do
   let token =
         tokenFromURI req <|> tokenFromXOriginalURI req <|> tokenFromCookie req
@@ -57,7 +59,9 @@ mainWithArgs (tokenFilePath:_) = do
   secretToken <- B.strip <$> B.readFile tokenFilePath
   let port = 8082
   printf "Listening on http://localhost:%d/\n" port
-  run port (authApp secretToken)
+  runSettings
+    (setHost "127.0.0.1" $ setPort port $ defaultSettings)
+    (authApp secretToken)
 mainWithArgs _ = error "Usage: tsoken <token-file-path>"
 
 main :: IO ()
